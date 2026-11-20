@@ -119,6 +119,11 @@ export default function App() {
   const mainRef = useRef<HTMLElement>(null)
   const index = Math.max(0, steps.findIndex(step => step.id === lesson.currentId))
   const step = steps[index]
+  const workspaceSize = step.kind === 'video' || step.kind === 'writing' || step.kind === 'match' || step.kind === 'sort'
+    ? 'wide'
+    : step.kind === 'vocabulary' || step.kind === 'activity-complete' || step.kind === 'section-complete' || step.kind === 'speaking-intro' || step.kind === 'intro' || step.kind === 'done'
+      ? 'compact'
+      : 'standard'
   const completed = new Set(lesson.completed)
   const completedCount = countableSteps.filter(item => completed.has(item.id)).length
   const showAdvance = step.kind !== 'done' && (previewMode || canAdvance(step, lesson, Boolean(recordings[step.id])))
@@ -201,23 +206,25 @@ export default function App() {
       </div>
     </header>
     <main ref={mainRef} className="learning-main" id="main-content" tabIndex={-1}>
-      <AnimatePresence initial={false} mode="popLayout" custom={{ direction, reduceMotion }}>
-        <motion.div key={step.id} className={`step-panel kind-${step.kind}`} custom={{ direction, reduceMotion }}
-          variants={stepVariants} initial="enter" animate="center" exit="exit"
-          onAnimationComplete={() => {
-            if (step.id === currentStepIdRef.current && transitioningRef.current) {
-              transitioningRef.current = false
-              setTransitioning(false)
-            }
-          }}>
-          <StepView step={step} answer={lesson.answers[step.id] ?? ''}
-            progress={{ answers: lesson.answers, submitted: lesson.submitted, completed: lesson.completed, skipped: lesson.skipped, recordedIds: Object.keys(recordings) }}
-            onAnswer={answer} submitted={lesson.submitted.includes(step.id)}
-            onSubmit={submit} onRetry={retry}
-            skipped={lesson.skipped.includes(step.id)} onSkip={skip}
-            recording={recordings[step.id]} onRecording={record} />
-        </motion.div>
-      </AnimatePresence>
+      <div className={`learning-workspace size-${workspaceSize}`}>
+        <AnimatePresence initial={false} mode="popLayout" custom={{ direction, reduceMotion }}>
+          <motion.div key={step.id} className={`step-panel kind-${step.kind}`} custom={{ direction, reduceMotion }}
+            variants={stepVariants} initial="enter" animate="center" exit="exit"
+            onAnimationComplete={() => {
+              if (step.id === currentStepIdRef.current && transitioningRef.current) {
+                transitioningRef.current = false
+                setTransitioning(false)
+              }
+            }}>
+            <StepView step={step} answer={lesson.answers[step.id] ?? ''}
+              progress={{ answers: lesson.answers, submitted: lesson.submitted, completed: lesson.completed, skipped: lesson.skipped, recordedIds: Object.keys(recordings) }}
+              onAnswer={answer} submitted={lesson.submitted.includes(step.id)}
+              onSubmit={submit} onRetry={retry}
+              skipped={lesson.skipped.includes(step.id)} onSkip={skip}
+              recording={recordings[step.id]} onRecording={record} />
+          </motion.div>
+        </AnimatePresence>
+      </div>
     </main>
     <footer className="learning-footer">
       <button className="back-button" onClick={back} disabled={index === 0 || transitioning}><ArrowLeft size={18} /> Back</button>
