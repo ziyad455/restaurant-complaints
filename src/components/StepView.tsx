@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useLayoutEffect, useRef, useState } from 'react'
 import { AnimatePresence, motion, useReducedMotion } from 'motion/react'
 import { ArrowRight, Check, ChevronDown, ChevronLeft, ChevronRight, Mic, RotateCcw, X } from 'lucide-react'
 import type { FillStep, LanguageStep, LessonStep, PracticeFiveStep, QuestionStep, UnjumbleStep, VocabularyStep } from '../flow'
@@ -31,11 +31,29 @@ function Sequence({ label, current, total }: { label: string; current: number; t
   return <div className="step-eyebrow"><span>{label}</span><span>{current} of {total}</span></div>
 }
 
-function AnswerFeedback({ correct, answer }: { correct: boolean; answer: string }) {
-  return <div className={`answer-feedback ${correct ? 'is-correct' : 'is-incorrect'}`} role="status">{correct ? <Check size={18} aria-hidden="true" /> : <X size={18} aria-hidden="true" />}<span>{correct ? 'Correct!' : `Not quite. The correct answer is: ${answer}`}</span></div>
+function useFeedbackVisibility(submitted: boolean) {
+  const feedbackRef = useRef<HTMLDivElement>(null)
+  const wasSubmitted = useRef(submitted)
+  const reduceMotion = useReducedMotion()
+  useLayoutEffect(() => {
+    if (submitted && !wasSubmitted.current && feedbackRef.current) {
+      const scroller = feedbackRef.current.closest<HTMLElement>('.learning-main')
+      if (scroller) {
+        const overflow = feedbackRef.current.getBoundingClientRect().bottom - scroller.getBoundingClientRect().bottom + 16
+        if (overflow > 0) scroller.scrollTo({ top: scroller.scrollTop + overflow, behavior: reduceMotion ? 'instant' : 'smooth' })
+      }
+    }
+    wasSubmitted.current = submitted
+  }, [submitted, reduceMotion])
+  return feedbackRef
+}
+
+function AnswerFeedback({ correct, answer, feedbackRef }: { correct: boolean; answer: string; feedbackRef: React.RefObject<HTMLDivElement | null> }) {
+  return <div ref={feedbackRef} className={`answer-feedback ${correct ? 'is-correct' : 'is-incorrect'}`} role="status">{correct ? <Check size={18} aria-hidden="true" /> : <X size={18} aria-hidden="true" />}<span>{correct ? 'Correct!' : `Not quite. The correct answer is: ${answer}`}</span></div>
 }
 
 function Question({ step, answer, onAnswer, submitted, onSubmit, onRetry }: StepViewProps & { step: QuestionStep }) {
+  const feedbackRef = useFeedbackVisibility(submitted)
   const chosen = answer === '' ? -1 : Number(answer)
   const correct = chosen === step.correct
   const label = step.id.startsWith('revision') ? 'Revision' : step.kind === 'match' ? 'Vocabulary matching' : step.kind === 'sort' ? 'Practice 4: sentence sorting' : step.title
@@ -47,7 +65,7 @@ function Question({ step, answer, onAnswer, submitted, onSubmit, onRetry }: Step
       const showWrong = submitted && selected && !correct
       return <RevealItem key={option}><button type="button" className={`option-button ${selected ? 'is-selected' : ''} ${showCorrect ? 'is-correct' : ''} ${showWrong ? 'is-incorrect' : ''}`} aria-pressed={selected} onClick={() => onAnswer(String(index))} disabled={submitted}><span className="option-marker">{String.fromCharCode(65 + index)}</span><span>{option}</span>{showCorrect && <Check size={19} aria-hidden="true" />}</button></RevealItem>
     })}</div>
-    {submitted && <AnswerFeedback correct={correct} answer={step.options[step.correct]} />}
+    {submitted && <AnswerFeedback correct={correct} answer={step.options[step.correct]} feedbackRef={feedbackRef} />}
     {(!submitted || !correct) && <RevealItem><div className="step-actions">{!submitted
       ? <PrimaryAction onClick={onSubmit} disabled={chosen < 0}>Check answer</PrimaryAction>
       : <button className="text-action" onClick={onRetry}><RotateCcw size={16} /> Try again</button>}</div></RevealItem>}
@@ -55,9 +73,10 @@ function Question({ step, answer, onAnswer, submitted, onSubmit, onRetry }: Step
 }
 
 function FillQuestion({ step, answer, onAnswer, submitted, onSubmit, onRetry }: StepViewProps & { step: FillStep }) {
+  const feedbackRef = useFeedbackVisibility(submitted)
   const correct = normalizedAnswer(answer) === step.answer
   return <div className="question-step"><RevealItem><Sequence label="Complete the sentence" current={step.sequence} total={step.total} /></RevealItem><RevealItem><h1>{step.title}</h1><p className="question-prompt">{step.prompt}</p></RevealItem><RevealItem><label className="text-answer">Missing word<input value={answer} onChange={event => onAnswer(event.target.value)} disabled={submitted} autoComplete="off" autoFocus /></label></RevealItem>
-    {submitted && <AnswerFeedback correct={correct} answer={step.answer} />}
+    {submitted && <AnswerFeedback correct={correct} answer={step.answer} feedbackRef={feedbackRef} />}
     {(!submitted || !correct) && <RevealItem><div className="step-actions">{!submitted
       ? <PrimaryAction onClick={onSubmit} disabled={!answer.trim()}>Check answer</PrimaryAction>
       : <button className="text-action" onClick={onRetry}><RotateCcw size={16} /> Try again</button>}</div></RevealItem>}
@@ -73,12 +92,13 @@ function Language({ step }: { step: LanguageStep }) {
 }
 
 function Unjumble({ step, answer, onAnswer, submitted, onSubmit, onRetry }: StepViewProps & { step: UnjumbleStep }) {
+  const feedbackRef = useFeedbackVisibility(submitted)
   const words = step.expression.split(' ')
   const chosen = answer ? answer.split(',').map(Number) : []
   const remaining = words.map((_, index) => index).reverse().filter(index => !chosen.includes(index))
   const correct = chosen.join(',') === words.map((_, index) => index).join(',')
   return <div className="unjumble-step"><RevealItem><Sequence label="Practice 3: put the words in order" current={step.sequence} total={step.total} /></RevealItem><RevealItem><h1>Build the complaint</h1><p className="step-lead">Choose the words in the right order. Select a word in your answer to remove it.</p></RevealItem><RevealItem><div className="word-answer" aria-label="Your sentence">{chosen.length ? chosen.map((index, position) => <button key={index} disabled={submitted} onClick={() => onAnswer(chosen.filter((_, i) => i !== position).join(','))}>{words[index]}</button>) : <span>Your sentence appears here</span>}</div><div className="word-bank" aria-label="Available words">{remaining.map(index => <button key={index} disabled={submitted} onClick={() => onAnswer([...chosen, index].join(','))}>{words[index]}</button>)}</div></RevealItem>
-    {submitted && <AnswerFeedback correct={correct} answer={step.expression} />}
+    {submitted && <AnswerFeedback correct={correct} answer={step.expression} feedbackRef={feedbackRef} />}
     {(!submitted || !correct) && <RevealItem><div className="step-actions">{!submitted
       ? <PrimaryAction onClick={onSubmit} disabled={chosen.length !== words.length}>Check sentence</PrimaryAction>
       : <button className="text-action" onClick={onRetry}><RotateCcw size={16} /> Try again</button>}</div></RevealItem>}
